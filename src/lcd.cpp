@@ -1,4 +1,3 @@
-// src/lcd.cpp
 
 #include "lcd.h"
 
@@ -10,35 +9,18 @@
 
 static const char* TAG_LCD = "LCD_I2C";
 
-// Global mutex for LCD access
 SemaphoreHandle_t lcd_mutex = nullptr;
 
-// Simple macros to lock/unlock
 #define LCD_LOCK()   do { if (lcd_mutex) xSemaphoreTake(lcd_mutex, portMAX_DELAY); } while (0)
 #define LCD_UNLOCK() do { if (lcd_mutex) xSemaphoreGive(lcd_mutex); } while (0)
 
-// -------------------------
-// I2C configuration
-// -------------------------
-#define I2C_PORT        I2C_NUM_0
-#define I2C_SDA_PIN     GPIO_NUM_21   // change if wired differently
-#define I2C_SCL_PIN     GPIO_NUM_22   // change if wired differently
-#define I2C_FREQ_HZ     100000
-#define LCD_I2C_ADDR    0x27          // common PCF8574 address (0x27 or 0x3F)
 
-// -------------------------
-// PCF8574 pin mapping
-// -------------------------
-//
-// P0 -> RS
-// P1 -> RW
-// P2 -> EN
-// P3 -> BACKLIGHT
-// P4 -> D4
-// P5 -> D5
-// P6 -> D6
-// P7 -> D7
-//
+#define I2C_PORT        I2C_NUM_0
+#define I2C_SDA_PIN     GPIO_NUM_21   
+#define I2C_SCL_PIN     GPIO_NUM_22  
+#define I2C_FREQ_HZ     100000
+#define LCD_I2C_ADDR    0x27          
+
 #define LCD_RS  (1 << 0)
 #define LCD_RW  (1 << 1)
 #define LCD_EN  (1 << 2)
@@ -50,9 +32,6 @@ SemaphoreHandle_t lcd_mutex = nullptr;
 
 static bool s_backlight = true;
 
-// -------------------------
-// Low-level I2C write
-// -------------------------
 
 static esp_err_t lcd_i2c_write_byte(uint8_t data)
 {
@@ -64,11 +43,6 @@ static esp_err_t lcd_i2c_write_byte(uint8_t data)
         pdMS_TO_TICKS(50)
     );
 }
-
-// -------------------------
-// Send a 4-bit nibble to LCD (upper or lower part of a byte)
-// rs = 0 for command, 1 for data
-// -------------------------
 
 static void lcd_write_nibble(uint8_t nibble, bool rs)
 {
@@ -82,26 +56,19 @@ static void lcd_write_nibble(uint8_t nibble, bool rs)
     if (nibble & 0x04) data |= LCD_D6;
     if (nibble & 0x08) data |= LCD_D7;
 
-    // EN HIGH
     data |= LCD_EN;
     lcd_i2c_write_byte(data);
     vTaskDelay(pdMS_TO_TICKS(1));
 
-    // EN LOW
     data &= ~LCD_EN;
     lcd_i2c_write_byte(data);
     vTaskDelay(pdMS_TO_TICKS(1));
 }
 
-// -------------------------
-// Send full byte (command or data) using 4-bit interface
-// -------------------------
 
 static void lcd_send_cmd(uint8_t cmd)
 {
-    // upper nibble first
     lcd_write_nibble((cmd >> 4) & 0x0F, false);
-    // lower nibble
     lcd_write_nibble(cmd & 0x0F, false);
 }
 
@@ -111,15 +78,11 @@ static void lcd_send_data(uint8_t data)
     lcd_write_nibble(data & 0x0F, true);
 }
 
-// -------------------------
-// Public functions
-// -------------------------
 
 void lcd_init()
 {
     ESP_LOGI(TAG_LCD, "Initializing I2C LCD...");
 
-    // Create mutex once
     if (lcd_mutex == nullptr) {
         lcd_mutex = xSemaphoreCreateMutex();
         if (!lcd_mutex) {
@@ -127,7 +90,6 @@ void lcd_init()
         }
     }
 
-    // I2C config
     i2c_config_t conf = {};
     conf.mode = I2C_MODE_MASTER;
     conf.sda_io_num = I2C_SDA_PIN;
@@ -139,29 +101,21 @@ void lcd_init()
     ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
     ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
 
-    vTaskDelay(pdMS_TO_TICKS(50)); // wait for LCD power-up
+    vTaskDelay(pdMS_TO_TICKS(50)); 
 
-    // We don't lock here because no other task uses LCD before init completes
-
-    // Initialization sequence for HD44780 in 4-bit mode
     lcd_write_nibble(0x03, false);
     vTaskDelay(pdMS_TO_TICKS(5));
     lcd_write_nibble(0x03, false);
     vTaskDelay(pdMS_TO_TICKS(5));
     lcd_write_nibble(0x03, false);
     vTaskDelay(pdMS_TO_TICKS(5));
-    lcd_write_nibble(0x02, false);  // 4-bit mode
+    lcd_write_nibble(0x02, false);  
 
-    // Function set: 4-bit, 2 line, 5x8 dots
     lcd_send_cmd(0x28);
-    // Display off
     lcd_send_cmd(0x08);
-    // Clear display
     lcd_send_cmd(0x01);
     vTaskDelay(pdMS_TO_TICKS(2));
-    // Entry mode: increment, no shift
     lcd_send_cmd(0x06);
-    // Display on, cursor off, blink off
     lcd_send_cmd(0x0C);
 
     ESP_LOGI(TAG_LCD, "LCD init done");
@@ -177,7 +131,6 @@ void lcd_clear()
 
 void lcd_set_cursor(int col, int row)
 {
-    // ⚠ Not locked: used inside already-locked high-level functions and by keypad
     if (col < 0) col = 0;
     if (col > 15) col = 15;
     if (row < 0) row = 0;
@@ -190,28 +143,23 @@ void lcd_set_cursor(int col, int row)
 
 void lcd_write_char(char c)
 {
-    // ⚠ Not locked: assume caller handles concurrency
     lcd_send_data((uint8_t)c);
 }
 
 void lcd_write_string(const char* str)
 {
-    // ⚠ Not locked: assume caller handles concurrency
     while (*str) {
         lcd_write_char(*str++);
     }
 }
 
-// High-level helper: show text on both lines, safely
 void lcd_show_message(const char* msg)
 {
     LCD_LOCK();
 
-    // Clear display
     lcd_send_cmd(0x01);
     vTaskDelay(pdMS_TO_TICKS(3));
 
-    // Write line 1
     lcd_set_cursor(0, 0);
 
     int i = 0;
@@ -220,23 +168,19 @@ void lcd_show_message(const char* msg)
         i++;
     }
 
-    // Clear rest of line 1
     for (int col = i; col < 16; col++) {
         lcd_write_char(' ');
     }
 
-    // Move to second line
     lcd_set_cursor(0, 1);
 
-    // If no newline, clear line 2 and exit
     if (msg[i] != '\n') {
-        lcd_write_string("                "); // 16 spaces
+        lcd_write_string("                ");
         LCD_UNLOCK();
         return;
     }
 
-    // Has newline → print line 2
-    i++; // skip newline
+    i++;
     int col = 0;
 
     while (msg[i] != '\0' && col < 16) {
@@ -245,13 +189,11 @@ void lcd_show_message(const char* msg)
         col++;
     }
 
-    // Clear rest of line 2
     for (; col < 16; col++) lcd_write_char(' ');
 
     LCD_UNLOCK();
 }
 
-// High-level helper: show countdown on second line
 void lcd_show_countdown(int seconds_left)
 {
     char buf[17] = {0};
@@ -260,7 +202,7 @@ void lcd_show_countdown(int seconds_left)
     LCD_LOCK();
 
     lcd_set_cursor(0, 1);
-    lcd_write_string("                "); // clear whole line
+    lcd_write_string("                "); 
     lcd_set_cursor(0, 1);
     lcd_write_string(buf);
 

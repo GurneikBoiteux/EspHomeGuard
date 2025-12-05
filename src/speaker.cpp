@@ -48,48 +48,36 @@ void speaker_set_alarm(bool on)
     alarm_active = on;
 
     if (on) {
-        // Set PWM frequency & start tone
         ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, ALARM_FREQ);
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, PWM_DUTY);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
     } else {
-        // Stop tone
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
     }
 }
 
-// ===============================
-// Non-blocking short beep
-// speaker_task polls this every 20ms
-// ===============================
+
 void speaker_beep_once(int ms)
 {
     int64_t now = esp_timer_get_time();
     beep_end_time = now + (ms * 1000);
 
-    // set beep freq
     ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, BEEP_FREQ);
 
-    // turn ON beep
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, PWM_DUTY);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 
     ESP_LOGI(TAG, "Beep start (%d ms)", ms);
 }
 
-// ===============================
-// Called periodically by speaker_task
-// Turns beep OFF at correct time
-// ===============================
 void speaker_update()
 {
-    if (alarm_active) return; // continuous alarm overrides beeps
+    if (alarm_active) return; 
 
     int64_t now = esp_timer_get_time();
     if (beep_end_time != 0 && now >= beep_end_time) {
 
-        // stop beep
         ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 

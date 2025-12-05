@@ -1,4 +1,3 @@
-// src/main.cpp
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,7 +14,6 @@
 #include "led.h"
 #include "remote.h"
 
-// ==== NEW INCLUDES FOR WIFI + MQTT ====
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -23,26 +21,18 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
-// =========================
-// Global logging tag
-// =========================
+
 static const char* TAG = "ALARM_MAIN";
 
-// =========================
-// WiFi + MQTT config
-// =========================
 #define WIFI_SSID "NOKIA-1580"
-#define WIFI_PASS "unitthree"
+#define WIFI_PASS "xxxxx"
 
-// EMQX Serverless TLS endpoint
 static const char* MQTT_URI = "mqtts://s66a1a0e.ala.us-east-1.emqxsl.com:8883";
 
-// MQTT topics
 static const char* TOPIC_CMD       = "alarm/cmd";
 static const char* TOPIC_TELEMETRY = "alarm/telemetry";
 
-// CA certificate from emqxsl-ca.crt
-// Paste entire file contents (including BEGIN/END lines) inside the string:
+
 static const char EMQX_CA_CERT_PEM[] = R"(-----BEGIN CERTIFICATE-----
 MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
 MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
@@ -66,13 +56,8 @@ pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
 MrY=
 -----END CERTIFICATE-----)";
 
-// MQTT client handle
 static esp_mqtt_client_handle_t g_mqtt_client = nullptr;
 
-
-// =========================
-// Alarm States & Events
-// =========================
 
 enum class AlarmState {
     DISARMED,
@@ -96,9 +81,6 @@ struct AlarmEvent {
 };
 
 
-// =========================
-// Global State
-// =========================
 static AlarmState g_state = AlarmState::DISARMED;
 static QueueHandle_t g_eventQueue = nullptr;
 
@@ -106,29 +88,19 @@ static const int EXIT_DELAY_MS = 15000;
 static TickType_t g_exit_deadline = 0;
 static int g_exit_seconds_remaining = 0;
 
-// last ultrasonic distance (for telemetry)
 static int g_last_distance_cm = -1;
 
-
-// =========================
-// Forward declarations
-// =========================
 
 void alarm_task(void* pv);
 void ultrasonic_task(void* pv);
 void keypad_task(void* pv);
 void speaker_task(void* pv);
 void led_task(void* pv);
-// remote_task is no longer used for MQTT-based remote, but we keep it if
-// you want to simulate IR remote etc.
+
 void remote_task(void* pv);
 void lcd_task(void* pv);
-void mqtt_task(void* pv);  // NEW
+void mqtt_task(void* pv); 
 
-
-// =========================
-// Abstract APIs
-// =========================
 
 void led_set_disarmed();
 void led_set_armed();
@@ -136,11 +108,6 @@ void led_set_alarm();
 void led_set_exit_delay_level(int sec_left);
 
 RemoteCommandType remote_check_command();
-
-
-// =========================
-// WIFI INIT (STA MODE)
-// =========================
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data)
@@ -183,10 +150,6 @@ static void wifi_init_sta()
     ESP_LOGI(TAG, "WiFi STA init done");
 }
 
-
-// =========================
-// MQTT EVENT HANDLER
-// =========================
 
 static void mqtt_publish_state()
 {
@@ -251,7 +214,6 @@ static void mqtt_event_handler(void* handler_args,
                      event->topic_len, event->topic,
                      event->data_len, event->data);
 
-            // check if this is the command topic
             std::string topic(event->topic, event->topic + event->topic_len);
             if (topic == TOPIC_CMD) {
                 mqtt_arm_disarm_from_cmd(event->data, event->data_len);
@@ -280,11 +242,6 @@ static void mqtt_init()
 
     ESP_LOGI(TAG, "MQTT client started");
 }
-
-
-// =========================
-// Alarm State Machine
-// =========================
 
 void alarm_task(void* pv)
 {
@@ -356,12 +313,10 @@ void alarm_task(void* pv)
             if (old != g_state) {
                 ESP_LOGI(TAG, "STATE CHANGE: %d -> %d",
                          (int)old, (int)g_state);
-                // whenever state changes, push telemetry
                 mqtt_publish_state();
             }
         }
 
-        // TIMER HANDLING FOR EXIT DELAY
         if (g_state == AlarmState::EXIT_DELAY)
         {
             TickType_t now = xTaskGetTickCount();
@@ -389,10 +344,6 @@ void alarm_task(void* pv)
 }
 
 
-// =========================
-// Ultrasonic Task
-// =========================
-
 void ultrasonic_task(void* pv)
 {
     while (true)
@@ -409,17 +360,6 @@ void ultrasonic_task(void* pv)
         vTaskDelay(pdMS_TO_TICKS(150));
     }
 }
-
-
-// =========================
-// Keypad Task
-// (unchanged except uses event queue)
-// =========================
-
-// ... keep your existing keypad_task exactly as in original file ...
-
-// [FOR BREVITY: paste your existing keypad_task implementation here,
-// it’s unchanged from your current code.]
 
 void keypad_task(void* pv)
 {
@@ -533,10 +473,6 @@ void keypad_task(void* pv)
 }
 
 
-// =========================
-// Speaker Task (unchanged)
-// =========================
-
 extern void speaker_update();
 
 void speaker_task(void* pv)
@@ -579,11 +515,6 @@ void speaker_task(void* pv)
     }
 }
 
-
-// =========================
-// LED Task (unchanged)
-// =========================
-
 void led_task(void* pv)
 {
     AlarmState prev = AlarmState::DISARMED;
@@ -619,31 +550,19 @@ void led_task(void* pv)
     }
 }
 
-
-// =========================
-// MQTT Task
-// Periodically publishes telemetry
-// =========================
-
 void mqtt_task(void* pv)
 {
     while (true)
     {
         mqtt_publish_state();
-        vTaskDelay(pdMS_TO_TICKS(2000));  // every 2s
+        vTaskDelay(pdMS_TO_TICKS(2000));  
     }
 }
-
-
-// =========================
-// Remote Task (optional stub)
-// =========================
 
 void remote_task(void* pv)
 {
     while (true)
     {
-        // keep if you'd like to still support the old stub IR remote.
         RemoteCommandType cmd = remote_check_command();
 
         if (cmd == RemoteCommandType::ARM)
@@ -662,10 +581,6 @@ void remote_task(void* pv)
 }
 
 
-// =========================
-// LCD Task
-// =========================
-
 void lcd_task(void* pv)
 {
     while (true)
@@ -674,21 +589,16 @@ void lcd_task(void* pv)
     }
 }
 
-
-// =========================
-// MAIN ENTRY
-// =========================
-
 extern "C" void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
 
     ESP_LOGI(TAG, "Smart Home Alarm – RTOS core starting");
 
-    wifi_init_sta();  // NEW
-    vTaskDelay(pdMS_TO_TICKS(2000)); // give WiFi time
+    wifi_init_sta(); 
+    vTaskDelay(pdMS_TO_TICKS(2000)); 
 
-    mqtt_init();      // NEW
+    mqtt_init();     
 
     ultrasonic_init();
     keypad_init();

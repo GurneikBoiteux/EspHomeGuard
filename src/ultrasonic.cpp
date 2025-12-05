@@ -9,7 +9,6 @@
 
 static const char* TAG = "ULTRA";
 
-// UPDATE THESE TO MATCH YOUR WIRING
 #define TRIG_PIN  GPIO_NUM_5
 #define ECHO_PIN  GPIO_NUM_18
 
@@ -35,34 +34,29 @@ void ultrasonic_init()
 
 int ultrasonic_get_distance_cm()
 {
-    // Make sure trigger starts LOW
     gpio_set_level(TRIG_PIN, 0);
-    esp_rom_delay_us(2);   // <-- CHANGED
+    esp_rom_delay_us(2);   
 
-    // 10us trigger pulse
     gpio_set_level(TRIG_PIN, 1);
-    esp_rom_delay_us(10);  // <-- CHANGED
+    esp_rom_delay_us(10);  
     gpio_set_level(TRIG_PIN, 0);
 
-    // WAIT FOR ECHO HIGH
     int timeout = 30000;
     while (gpio_get_level(ECHO_PIN) == 0) {
         if (--timeout == 0) return -1;
-        esp_rom_delay_us(1);   // <-- CHANGED
+        esp_rom_delay_us(1);  
     }
 
-    // MEASURE HIGH TIME
     int64_t start = esp_timer_get_time();
     timeout = 30000;
     while (gpio_get_level(ECHO_PIN) == 1) {
         if (--timeout == 0) return -1;
-        esp_rom_delay_us(1);   // <-- CHANGED
+        esp_rom_delay_us(1);  
     }
     int64_t end = esp_timer_get_time();
 
     int duration_us = (int)(end - start);
 
-    // Convert to cm
     int distance_cm = duration_us / 58;
 
     if (distance_cm < 2 || distance_cm > 400)
